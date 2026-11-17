@@ -1,0 +1,73 @@
+name: Add college logos
+on:
+  push:
+    paths: ['.github/workflows/add-college-logos.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  logos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch college logos
+        run: |
+          set -euo pipefail
+          pip install pillow
+          git clone --depth 1 https://github.com/mohamed772370-m/yemen-academy-data /tmp/ya
+          cat > /tmp/patch2.py <<'PYEOF'
+          import json,re,base64,io,hashlib,sys,collections
+          from PIL import Image
+          YA=sys.argv[1]
+          assert hashlib.sha256(open('original/index.html','rb').read()).hexdigest()=='2a554221cd5a5c7bca789ea51aa590172cf9b866a94c1057568ce93f68df49a3'
+          nm=lambda t:re.sub(r'[\u064B-\u065F\u0640]','',str(t)).replace('أ','ا').replace('إ','ا').replace('آ','ا').replace('ى','ي').replace('ة','ه').lower().strip()
+          raw=open('site-data.json',encoding='utf-8').read().strip()
+          d=json.loads(raw)
+          assert 'clogos' not in d and len(d['logos'])==7
+          s=json.load(open(YA+'/assets/data/site-data.json',encoding='utf-8'))
+          sud={nm(u['n']):u for u in s['ud']}
+          alias={'جامعة آزال للتنمية البشرية':'جامعة ازال للتنمية البشرية'}
+          cols=list(collections.OrderedDict.fromkeys((r['entity'],r['college']) for r in d['rows']))
+          cl={};used={}
+          for e,col in cols:
+              u=sud.get(nm(alias.get(e,e)))
+              if not u: continue
+              for g in u['g']:
+                  if nm(g['n'])==nm(col) and g.get('l'):
+                      fn=g['l'].split('/')[-1]
+                      # skip when it is the same image as the entity logo (display falls back to it)
+                      used.setdefault(fn,None)
+                      if fn not in ('uni-543f448d.webp','uni-72a3ad00.webp','uni-149c8701.webp'):
+                          if fn not in used or used[fn] is None:
+                              im=Image.open(YA+'/assets/logos/'+fn).convert('RGBA')
+                              im.thumbnail((256,256),Image.LANCZOS)
+                              b=io.BytesIO();im.save(b,'WEBP',quality=88)
+                              used[fn]='data:image/webp;base64,'+base64.b64encode(b.getvalue()).decode()
+                          cl.setdefault(e,{})[col]=used[fn]
+          d['clogos']=cl
+          n=sum(len(v) for v in cl.values());print('college logos',n,{k:len(v) for k,v in cl.items()})
+          new=json.dumps(d,ensure_ascii=False,separators=(',',':'))
+          h=open('index.html',encoding='utf-8').read()
+          assert h.count(raw)==1
+          h=h.replace(raw,new,1)
+          def rep(a,b):
+              global h
+              assert h.count(a)==1,a
+              h=h.replace(a,b,1)
+          rep("const LG=DATA.logos;","const LG=DATA.logos;const CL=DATA.clogos||{};const clOf=(u,g)=>(CL[u.n]&&CL[u.n][g.n])||u.l||'';")
+          rep("const icon=g?`<span class=\"ui ct\">${BLD}</span>`:","const icon=g?(clOf(u,g)?`<span class=\"ui lg\"><img src=\"${clOf(u,g)}\" alt=\"شعار ${esc(g.n)}\"></span>`:`<span class=\"ui ct\">${BLD}</span>`):")
+          rep("<span class=\"ul ct\">${BLD}</span><span class=\"unm\">${esc(name)}</span>","<span class=\"ul${clOf(u,x)?'':' ct'}\">${clOf(u,x)?`<img src=\"${clOf(u,x)}\" alt=\"شعار ${esc(name)}\" decoding=\"async\">`:BLD}</span><span class=\"unm\">${esc(name)}</span>")
+          assert len(d['rows'])==7822 and len(d['guide'])==228 and len(d['summary'])==26 and len(d['logos'])==7
+          open('index.html','w',encoding='utf-8').write(h)
+          open('site-data.json','w',encoding='utf-8').write(new)
+
+          PYEOF
+          python3 /tmp/patch2.py /tmp/ya
+          sha256sum index.html site-data.json original/index.html
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html site-data.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Add college logos from last complete version'
+            git push
+          fi
