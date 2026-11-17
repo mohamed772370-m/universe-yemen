@@ -1,0 +1,26 @@
+name: Publish original UniVerse unchanged
+on:
+  push:
+    paths: ['.github/workflows/publish-original.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preserve and publish original attachment
+        run: |
+          set -euo pipefail
+          mkdir -p original
+          curl -L --fail --retry 3 'https://drive.google.com/uc?id=1KtWfXCuDRgoOEMx-HAW9Sdq3GHDj1F0A&export=download' -o /tmp/original.html
+          echo '2a554221cd5a5c7bca789ea51aa590172cf9b866a94c1057568ce93f68df49a3  /tmp/original.html' | sha256sum -c -
+          cp /tmp/original.html original/index.html
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add original/index.html
+          if ! git diff --cached --quiet; then
+            git commit -m 'Preserve original UniVerse before Excel binding'
+            git push
+          fi
