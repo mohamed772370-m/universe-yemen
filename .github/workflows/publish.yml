@@ -1,0 +1,28 @@
+name: Publish independent complete site
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download verified project
+        run: |
+          set -euo pipefail
+          curl -L --fail --retry 3 'https://drive.google.com/uc?id=18b0YjyE0Bw6r5eTLIEC4NuSShWZCExAv&export=download' -o /tmp/project.zip
+          echo 'ce01a60cd38c146b57eb6608cb2ab4e095746e7cefe6b8a2610343946c68bf97  /tmp/project.zip' | sha256sum -c -
+          unzip -o /tmp/project.zip
+          echo '5b572fe51f7a79425459c9ed3fa067a06377c959fff60724a8ec4e3c8040539f  index.html' | sha256sum -c -
+          echo 'ca87e2920b19318b5a59cdaa3c4aaaa721cadc0609066a6941ac267b77b3b9fc  assets/data/complete-site-data.json' | sha256sum -c -
+      - name: Save complete site
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html assets .nojekyll
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publish independent complete Yemen site'
+            git push
+          fi
