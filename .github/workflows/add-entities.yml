@@ -1,0 +1,76 @@
+name: Add curriculum-file entities
+on:
+  push:
+    paths: ['.github/workflows/*add-entities.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  entities:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add entities only
+        run: |
+          set -euo pipefail
+          cat > /tmp/names.txt <<'NEOF'
+          جامعة الحديدة
+          جامعة العلوم والتكنولوجيا
+          الجامعة اليمنية
+          جامعة الرشيد الذكية
+          جامعة الناصر
+          الجامعة اللبنانية الدولية - اليمن
+          الاكاديمية اليمنية
+          كلية أيلول الجامعية
+          جامعة العلوم الرقمية
+          جامعة 21 سبتمبر للعلوم الطبية والتطبيقية
+          جامعة اليمن
+          جامعة الأندلس للعلوم والتقنية
+          جامعة النخبة الدولية للعلوم والتكنولوجيا
+          جامعة ابن النفيس للعلوم الطبية
+          جامعة الأحقاف
+          جامعة الجزيرة - إب
+          جامعة البيضاء
+          جامعة اقرأ للعلوم والتكنولوجيا
+          جامعة المحويت
+          جامعة عمران
+          جامعة صعدة
+          الجامعة الماليزية الدولية - إب
+          جامعة الأقصى للعلوم والتكنلوجيا
+          جامعة القرآن الكريم والعلوم الأكاديمية
+          الجامعة الشمسية
+          جامعة الوحدة للعلوم والتكنولوجيا
+          جامعة دار العلوم الشرعية - الحديدة
+          جامعة الحضارة
+          جامعة جبلة للعلوم الطبية
+          جامعة اليمن والخليج للعلوم والتكنولوجيا
+          NEOF
+          cat > /tmp/patch.py <<'PEOF'
+          import json,hashlib,sys
+          NAMES=[l for l in open(sys.argv[1],encoding='utf-8').read().splitlines() if l.strip()]
+          assert len(NAMES)==30 and len(set(NAMES))==30
+          base=sys.argv[2]
+          assert hashlib.sha256(open(base+'original/index.html','rb').read()).hexdigest()=='2a554221cd5a5c7bca789ea51aa590172cf9b866a94c1057568ce93f68df49a3'
+          raw=open(base+'site-data.json',encoding='utf-8').read().strip()
+          d=json.loads(raw)
+          assert len(d['rows'])==7822 and len(d['guide'])==228 and len(d['summary'])==26 and len(d['logos'])==7
+          have={r['entity'] for r in d['rows']}
+          assert len(have)==7 and not (have & set(NAMES))
+          for i,n in enumerate(NAMES,1):
+              d['rows'].append({'id':'ent-%02d'%i,'src':'ملف المنهج 00-yemen_curriculum_extracted (جهة فقط)','entity':n,'college':'','field':'','major':'','track':'عام','level':'غير محدد','term':'غير محدد','code':'','ar':'(جهة مضافة من ملف المنهج - المقررات لم تُضف بعد)','en':'','hours':'','prereq':'','kind':'تخصص بدون خطة منشورة','url':''})
+          new=json.dumps(d,ensure_ascii=False,separators=(',',':'))
+          h=open(base+'index.html',encoding='utf-8').read()
+          assert h.count(raw)==1
+          open(base+'index.html','w',encoding='utf-8').write(h.replace(raw,new,1))
+          open(base+'site-data.json','w',encoding='utf-8').write(new)
+          print('rows',len(d['rows']),'entities',len({r['entity'] for r in d['rows']}))
+          PEOF
+          python3 /tmp/patch.py /tmp/names.txt ./
+          sha256sum index.html site-data.json original/index.html
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html site-data.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Add 30 entities from curriculum CSV (entities only)'
+            git push
+          fi
